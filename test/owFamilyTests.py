@@ -1,7 +1,6 @@
 __author__ = 'sdavidson'
 
 import unittest
-from enum import Enum
 from owFamily import FEATURES
 from owFamily import OwFamilyHelper
 
@@ -9,11 +8,15 @@ class OwFamilyHelperTests(unittest.TestCase):
     def setUp(self):
         self.helper = OwFamilyHelper()
 
-    def testFamily10(self):
+    def testGetFamilyInfo(self):
         thermoFamily = self.helper.getFamilyInfo('10')
         assert(thermoFamily.familyCode == '10')
         assert(FEATURES.Temperature in  thermoFamily.features)
         assert(thermoFamily.description == 'High Precision Digital Thermometer')
+
+    def testGetFamilyInfoString(self):
+        thermoFamily = self.helper.getFamilyInfo('20');
+        assert(str(thermoFamily) == 'Quad A/D Converter: Family Code: 20, Features: [Temperature, Voltage]')
 
     def getTestData_ds18s20(self):
         return {
@@ -77,15 +80,13 @@ class OwFamilyHelperTests(unittest.TestCase):
         }
 
     def getMemoryBytes(self, count):
-        # TODO fix this, there's probably a better way here...
         cyclestring='1234567890ABCDEF'
-        cyclelen = 16
-        outputString = ''
+        output = list()
         i = 0
         while i < count:
-            outputString += cyclestring[i % cyclelen]
+            output.append(cyclestring[i % len(cyclestring)])
             i += 1
-        return outputString
+        return ''.join(output)
 
     def getMemoryPage(self, inputData, bytesPerPage, pageNumber):
         start = pageNumber * bytesPerPage
@@ -114,6 +115,7 @@ class OwFamilyHelperTests(unittest.TestCase):
 
     def testFam10Finders(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Temperature])
+        assert(len(outData) == 6)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
         assert(outData['type'] == 'DS18S20')
@@ -123,18 +125,21 @@ class OwFamilyHelperTests(unittest.TestCase):
 
     def testFam10Finders_emptyRequestGetsBaseItems(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [])
+        assert(len(outData) == 3)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
         assert(outData['type'] == 'DS18S20')
 
     def testFam10Finders_wrongFamilyGetsBaseItems(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Current])
+        assert(len(outData) == 3)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
         assert(outData['type'] == 'DS18S20')
 
     def testDs2404_memory(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Memory])
+        assert(len(outData) == 19)
         assert(outData['type'] == 'DS2404')
         for i in range(0,14):
             keyname = 'pages/page.%d' % i
@@ -144,45 +149,50 @@ class OwFamilyHelperTests(unittest.TestCase):
 
     def testDs2404_clock(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock])
+        assert(len(outData) == 5)
         assert(outData['date'] == '2011/04/03 23:12:57')
         assert(outData['udate'] == '1301872377')
         
     def testDs2404_counter(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Counter])
+        assert(len(outData) == 4)
         assert(outData['cycle'] == '12')
 
     def testDs2404_clockAndCounter(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock, FEATURES.Counter])
+        assert(len(outData) == 6)
         assert(outData['date'] == '2011/04/03 23:12:57')
         assert(outData['udate'] == '1301872377')
         assert(outData['cycle'] == '12')
 
     def testDs2405(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2405(), [FEATURES.Pio, FEATURES.Sense])
+        assert(len(outData) == 5)
         assert(outData['pio'] == '0')
         assert(outData['sensed'] == '1')
 
     def testGetDesiredSensors(self):
         sensorList = ['01.FFFFFFFFFFFF', '10.147A0A020800', '35.431246AA4FBA', '43.FACBACC12343']
         testList = self.helper.getDesiredSensors(sensorList, set([FEATURES.Temperature]))
+        assert(len(testList) == 2)
         assert('10.147A0A020800' in testList)
         assert('35.431246AA4FBA' in testList)
-        assert('43.FACBACC12343' not in testList)
-        assert('01.FFFFFFFFFFFF' not in testList)
 
     def testAagTai8570_temperature(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Temperature])
+        assert(len(outData) == 4)
         assert(outData['tai8570/temperature'] == '22.875')
         # TODO: this should add a 'temperature' attribute if not present - client should not be aware of idiosyncrasies
         
     def testAagTai8570_pressure(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Pressure])
+        assert(len(outData) == 4)
         assert(outData['tai8570/pressure'] == '192.5')
         # TODO: this should add a 'pressure' attribute if not present - client should not be aware of idiosyncrasies
 
     def testAagTai8570_voltage(self):
         outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Voltage])
-        print outData
+        assert(len(outData) == 11)
         assert(outData['t8a/volt.0'] == '4.75')
         assert(outData['t8a/volt.1'] == '4.85')
         assert(outData['t8a/volt.2'] == '4.65')
@@ -201,6 +211,5 @@ class OwFamilyHelperTests(unittest.TestCase):
     # TODO: DS2760, family code 30 (weather station)
     # TODO: DS2740, family code 36
     # TODO: HobbyBoards UV
-        #TODO
-        
+
 
