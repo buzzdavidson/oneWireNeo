@@ -10,10 +10,9 @@ class OwFamily:
         self.familyCode = familyCode
         self.description = description
         self.features = features
-        # TODO
 
     def __str__(self):
-        return "%s: Family Code: %s, Features: %s" % (self.description, self.familyCode, self.features)
+        return "%s: Family Code: %s, Features: %s" % (self.description, self.familyCode, list(self.features))
 
 class OwFamilyHelper:
     def __init__(self):
@@ -128,7 +127,7 @@ class OwFamilyHelper:
         for key in inputData.iterkeys():
             for matcher in matchList:
                 if matcher.match(key):
-                    print("Feature %s matched key %s" % (feature, key))
+                    #print("Feature %s matched key %s" % (feature, key))
                     retval.add(key)
                     break
         return retval;
