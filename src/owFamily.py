@@ -107,6 +107,7 @@ class OwFamilyHelper:
         return self.__FAMILY_FEATURES.get(code, self.__UNKNOWN_FAMILY)
 
     def getMatchingAttributes(self, inputData, desiredFeatures):
+        # TODO: add sensor alias if found!
         # always include the basics: family, id, type
         retval = dict()
         self.__addAttributes(inputData, ['id', 'family', 'type'], retval)
@@ -130,8 +131,9 @@ class OwFamilyHelper:
                     #print("Feature %s matched key %s" % (feature, key))
                     retval.add(key)
                     break
-        return retval;
+        return retval
 
+    # TODO: update this to take Sensor object, use familyCode and skip tokenizing
     def getDesiredSensors(self, sensorList, desiredFeatures):
         retval = set()
         for sensor in sensorList:
@@ -140,5 +142,40 @@ class OwFamilyHelper:
             familyMetadata = self.getFamilyInfo(familyCode)
             if familyMetadata.features & desiredFeatures:
                 retval.add(sensor)
-        return retval;
+        return retval
+
+    """
+    import ow
+    from ow import Sensor
+
+    ownet.init("localhost:4304")
+    root = Sensor('/')
+    root.useCache(True)
+    sensors = list(root.sensors())
+
+    sensor = sensors[0]
+    str(sensor) gives '/10.5D4470010800 - DS18S20'
+    sensor.id gives '5D4470010800'
+    sensor.family gives '10'
+
+    entries = list(sensor.entries())
+    entries gives ['address','alias','crc8','errata',...etc]
+
+    sensor.entryList() gives same result.
+
+    sensor.__getattr__('temperature') gives '     13.1875'
+    same as sensor.temperature.
+
+    unfortunately we can't reference attribute directly.
+
+    'ownet' isn't working - have to use 'ow' instead.
+
+    why not just use owfs w fuse and filesystem refs?  Could provide both interfaces...
+    *** Use pyowfs instead: http://priesch.co.at/pyowfs - addresses issues with SWIG generated ow/ownet libraries,
+        allows access to properties with dots in name, allows access to binary pages, etc.
+
+
+
     
+    
+    """
