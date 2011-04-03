@@ -14,18 +14,28 @@ FEATURES = Enum('Temperature', 'Humidity', 'Pressure', 'Counter', 'Voltage', 'Cu
 PROPERTY_STATUS = Enum('New', 'Indeterminate', 'Decreased', 'Stable', 'Increased', 'Changed', 'Missing')
 PROPERTY_KIND = Enum('Numeric','String','Timestamp','Boolean','Binary')
 SENSOR_STATUS = Enum('New', 'Available', 'Missing')
+IDENT_PROPERTIES = ('id', 'family', 'type', 'MultiSensor/type', 'TAI8570/sibling')
+
+STATUS_BUMPS = {PROPERTY_STATUS.New: 'n', PROPERTY_STATUS.Indeterminate: '?', PROPERTY_STATUS.Stable: '=',
+                PROPERTY_STATUS.Changed: '~', PROPERTY_STATUS.Increased: '+', PROPERTY_STATUS.Decreased: '-',
+                PROPERTY_STATUS.Missing: '!' }
 
 '''
     Represents a single "Family" of 1-Wire devices
 '''
 class OneWireFamily:
     def __init__(self, familyCode, description, features = frozenset()):
-        self.familyCode = familyCode
-        self.description = description
-        self.features = features
+        self._familyCode = familyCode
+        self._description = description
+        self._desiredFeatures = features
 
     def __str__(self):
-        return "%s: Family Code: %s, Features: %s" % (self.description, self.familyCode, list(self.features))
+        return "%s: Family Code: %s, Features: %s" % (self._description, self._familyCode, list(self._desiredFeatures))
+
+    familyCode = property(lambda self: self._familyCode)
+    description = property(lambda self: self._description)
+    features = property(lambda self: self._desiredFeatures)
+
 
 class OneWireNeo:
 
@@ -40,6 +50,12 @@ class OneWireNeo:
         self._firstCycle = True
         self._sensors = dict()
         self._updateSensors()
+
+    desiredFeatures = property(lambda self: self._desiredFeatures)
+    address = property(lambda self: self._address)
+    # TODO: connected should check actual state
+    # TODO: sensors should return new list
+
 
     def refresh(self):
         self._updateSensors()
@@ -67,8 +83,10 @@ class OneWireNeo:
                 for sensor in knownSensors:
                     sensor._status = SENSOR_STATUS.Missing
         finally:
+            if self._firstCycle:
+                print(str(self))
             self._firstCycle = False
-            print(str(self))
+
 
     def __str__(self):
         retval = '\nOneWireNeo: Server'
@@ -77,24 +95,16 @@ class OneWireNeo:
             keyList = sorted(self._sensors.keys())
             for key in keyList:
                 sensor = self._sensors[key]
-                desc = str('%-30s' % (getSensorDescription(sensor._id)))
-                if len(desc) > 30:
-                    desc = desc[:30]
-                retval += str("\n%s\t%s\t%s\t%s" % (sensor._id, desc, sensor._status, sensor._lastRead.strftime('%m/%d/%y %H:%M:%S')))
+                desc = str('%-35s' % (getSensorDescription(sensor.id)))
+                if len(desc) > 35:
+                    desc = desc[:35]
+                retval += str("\n%s\t%s\t%s\t%s" % (sensor.id, desc, sensor.status, sensor.lastRead.strftime('%m/%d/%y %H:%M:%S')))
                 for propkey in sorted(sensor._properties.keys()):
                     prop = sensor._properties[propkey]
-                    if (prop._value is not None):
-                        if prop._status == PROPERTY_STATUS.Stable:
-                            statbump = '='
-                        elif prop._status == PROPERTY_STATUS.Changed:
-                            statbump = '~'
-                        elif prop._status == PROPERTY_STATUS.Increased:
-                            statbump = '+'
-                        elif prop._status == PROPERTY_STATUS.Decreased:
-                            statbump = '-'
-                        else:
-                            statbump = ' '
-                        retval += str("\n%s%-22s%16s [%s] %s" % ((' ' * 16), prop._name, prop.getFormattedValue(), statbump, prop._kind))
+                    if prop is not None:
+                        propval = prop.getFormattedValue()
+                        statbump = ' ' if prop.status is None else STATUS_BUMPS[prop.status]
+                        retval += str("\n%s%-22s%16s [%s] %s" % ((' ' * 16), prop.name, propval, statbump, prop.kind))
         else:
             retval += ' Not connected.'
         retval += '\n'
@@ -130,6 +140,14 @@ class OneWireNeoSensor:
         self._lastRead = None
         self._desiredFeatures = desiredFeatures
         self.update(sensor)
+
+    status = property(lambda self: self._status)
+    # TODO getter for properties
+    path = property(lambda self: self._path)
+    id = property(lambda self: self._id)
+    # TODO setter for cached
+    cached = property(lambda self: self._cached)
+    lastRead = property(lambda self: self._lastRead)
 
     def update(self, sensor):
         knownProperties = set(self._properties)
@@ -180,6 +198,15 @@ class OneWireNeoProperty:
         self._kind = self._determinePropertyKind(sensor, path)
         self._writable = self._determinePropertyMutability(sensor, path)
         self._updateValue(sensor)
+
+    path = property(lambda self: self._path)
+    status = property(lambda self: self._status)
+    lastRead = property(lambda self: self._lastRead)
+    # TODO writer for value
+    value = property(lambda self: self._value)
+    name = property(lambda self: self._name)
+    kind = property(lambda self: self._kind)
+    writable = property(lambda self: self._writable)
 
     def update(self, sensor):
         self._status = PROPERTY_STATUS.Indeterminate
@@ -262,6 +289,7 @@ _FAMILY_FEATURES = {
     '18' : OneWireFamily('18', 'Monetary Button with SHA-1', frozenset([FEATURES.Memory])),
     '1B' : OneWireFamily('1B', 'Battery ID/Monitor', frozenset([FEATURES.Temperature, FEATURES.Voltage, FEATURES.Counter])),
     '1C' : OneWireFamily('1C', 'EEPROM with Address Inputs', frozenset([FEATURES.Sense, FEATURES.Pio, FEATURES.Memory])),
+    # Family code 1D is also used in Hobby Boards counter, rain gauge, lightning detector, etc
     '1D' : OneWireFamily('1D', 'RAM with Counter', frozenset([FEATURES.Memory, FEATURES.Counter])),
     '1E' : OneWireFamily('1E', 'Smart Battery Monitor', frozenset([FEATURES.Temperature, FEATURES.Clock, FEATURES.Voltage])),
     '1F' : OneWireFamily('1F', 'MicroLAN Coupler'),
@@ -270,13 +298,15 @@ _FAMILY_FEATURES = {
     '22' : OneWireFamily('22', 'Economy Digital Thermometer', frozenset([FEATURES.Temperature])),
     '23' : OneWireFamily('23', 'EEPROM', frozenset([FEATURES.Memory])),
     '24' : OneWireFamily('24', 'Real Time Clock', frozenset([FEATURES.Clock])),
+    # Fam code 26 is DS2438 which is used in a lot of other products, Including Hobby Boards Anenometer Control Board
     '26' : OneWireFamily('26', 'Smart Battery Monitor', frozenset([FEATURES.Temperature, FEATURES.Pressure, FEATURES.Voltage, FEATURES.Humidity, FEATURES.Clock, FEATURES.Illumination])),
     '27' : OneWireFamily('27', 'Time Chip', frozenset([FEATURES.Clock])),
-    '28' : OneWireFamily('28', 'Programmable Resolution Digital Thermometer', frozenset([FEATURES.Temperature])),
+    '28' : OneWireFamily('28', 'Multi Rez Digital Thermometer', frozenset([FEATURES.Temperature])),
     '29' : OneWireFamily('29', '8 Channel Addressable Switch', frozenset([FEATURES.Pio, FEATURES.Sense, FEATURES.LCD])),
     '2C' : OneWireFamily('2C', 'Digital Potentiometer'),
     '2D' : OneWireFamily('2D', 'EEPROM', frozenset([FEATURES.Memory])),
     '2E' : OneWireFamily('2E', 'Battery Monitor and Charge Controller', frozenset([FEATURES.Temperature, FEATURES.Voltage, FEATURES.Current, FEATURES.Sense, FEATURES.Pio])),
+    # Fam code 30 is DS276x which is used in AAG weather station
     '30' : OneWireFamily('30', 'Hi-Precision Li+ Battery Monitor', frozenset([FEATURES.Temperature, FEATURES.Voltage, FEATURES.Current, FEATURES.Sense, FEATURES.Pio])),
     '35' : OneWireFamily('35', 'Multi-Chemistry Battery Fuel Gauge', frozenset([FEATURES.Temperature, FEATURES.Voltage, FEATURES.Current, FEATURES.Sense, FEATURES.Pio])),
     '36' : OneWireFamily('36', 'High-Precision Columb Counter', frozenset([FEATURES.Voltage, FEATURES.Sense, FEATURES.Pio])),
@@ -291,6 +321,10 @@ _FAMILY_FEATURES = {
     'EF' : OneWireFamily('EF', 'HobbyBoards Microprocessor-Based Slave', frozenset([FEATURES.UV])),
     'FF' : _UNKNOWN_FAMILY
 }
+
+# TODO: Use properties to modify sensor descriptions
+# TODO: Use properties to selectively hide sensors - TAI8570/sibling property contains property of paired sibling sensor for primary; secondary has no value under TAI8570/sibling.  Slave should not be displayed in list.
+# TODO: Allow specific sensor types to hide properties
 
 # TODO: duplicate value to standard key IIF (a) std key doesnt exist, (b) one value exists in category
 # TODO: add facility to standardize: mem pages= pages.0, etc
@@ -320,7 +354,7 @@ _SOURCE_PATTERNS = {
     FEATURES.Voltage: ['(8bit/)?volt(s)?(2)?', '(8bit/)?(T8A/)?volt(2)?\.[a-z,0-9]','(8bit/)?(T8A/)?volt(2)?\.all', 'V[AD]D', 'vbias', 'vis', 'volthours'],
     FEATURES.Current: ['current','amphours'],
     FEATURES.Sense: ['sensed', 'sensed\.[a-z]', 'sensed\.all', 'sensed\.byte'],
-    FEATURES.Pio: ['pio', 'pio\.[a-z]', 'pio\.all', 'pio\.byte', 'branch'],
+    FEATURES.Pio: ['pio', 'pio\.[a-z]', 'pio\.(all)?(byte)?', 'latch\.[a-z]','latch\.(all)?(byte)?', 'branch','channels','flipflop\.[AB]?(ALL)?(BYTE)?'],
     #FEATURES.Memory: ['application', 'memory','page\.ALL', 'page\.[\d]+', 'pages/page\.[\d]+', 'pages/page\.ALL'],
     FEATURES.Memory: ['application', 'page\.[\d]+', 'pages/page\.[\d]+'],
     FEATURES.Clock: ['(u)?date', 'readonly/clock', 'disconnect/(u)?date', 'endcharge/(u)?date', 'clock/(u)?date' ],
@@ -357,7 +391,7 @@ def getMatchingAttributes(inputData, desiredFeatures=None):
     # TODO - handle 'None' for desiredFeatures - implies "all"
     retval = dict()
     # Add default properties - these are always present
-    for attr in ['id', 'family', 'type']:
+    for attr in IDENT_PROPERTIES:
         if inputData.has_key(attr):
             retval[attr.lower()] = inputData[attr]
     # Then add matching entries for each feature in desiredFeatures
@@ -377,7 +411,7 @@ def getMatchingAttributes(inputData, desiredFeatures=None):
 
 def getDesiredAttributes(attributeList, desiredFeatures=None):
     retval = set()
-    for attr in ('id', 'family', 'type'):
+    for attr in IDENT_PROPERTIES:
         if attr in attributeList:
             retval.add(attr)
     for feature in desiredFeatures:
