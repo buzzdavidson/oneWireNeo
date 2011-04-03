@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 __author__ = 'sdavidson'
 
@@ -58,13 +58,12 @@ class OneWireNeo:
                     self._sensors[spath]._status = SENSOR_STATUS.Available
                     self._sensors[spath].update(foundSensor)
                 else:
-                    # TODO: check if sensor is in desired features
                     if isDesiredSensor(spath, self._desiredFeatures):
-                        print('Found new sensor at path %s' % spath)
+                        #print('Found new sensor at path %s' % spath)
                         sensor = OneWireNeoSensor(foundSensor, self._desiredFeatures)
                         self._sensors[spath] = sensor
                     else:
-                        print("Skipping sensor at [%s], its not in desired set")
+                        print("Skipping sensor at [%s], its not in desired set" % spath)
             # anything left in knownSensors?
             if len(knownSensors) > 0:
                 print("Some sensors seem to have gone missing!") # TODO: callback here(?)
@@ -77,13 +76,28 @@ class OneWireNeo:
     def __str__(self):
         retval = '\nOneWireNeo: Server'
         if self._connected:
-            retval += ' Connected to ' + self._address
-            retval += str(", %d Registered Sensors" % len(self._sensors))
-            retval += str("\n%s" % ('-' * 80))
+            retval += str("Connected to [%s], %d Registered Sensors\n%s" % (self._address, len(self._sensors), ('-' * 80)))
             keyList = sorted(self._sensors.keys())
             for key in keyList:
                 sensor = self._sensors[key]
-                retval += str("\n%s\t%s\t%s\t%s" % (sensor._id, getSensorDescription(sensor._id), sensor._status, sensor._lastRead))
+                desc = str('%-30s' % (getSensorDescription(sensor._id)))
+                if len(desc) > 30:
+                    desc = desc[:30]
+                retval += str("\n%s\t%s\t%s\t%s" % (sensor._id, desc, sensor._status, sensor._lastRead.strftime('%m/%d/%y %H:%M:%S')))
+                for propkey in sorted(sensor._properties.keys()):
+                    prop = sensor._properties[propkey]
+                    if prop._status == PROPERTY_STATUS.Stable:
+                        statbump = '='
+                    elif prop._status == PROPERTY_STATUS.Changed:
+                        statbump = '~'
+                    elif prop._status == PROPERTY_STATUS.Increased:
+                        statbump = '+'
+                    elif prop._status == PROPERTY_STATUS.Decreased:
+                        statbump = '-'
+                    else:
+                        statbump = ' '
+                    retval += str("\n%s%-22s%16s [%s]" % ((' ' * 16), prop._name, prop.getFormattedValue(), statbump))
+                # TODO add sensor variant support! ie, display AAG TAInnnn if AAG dir found
         else:
             retval += ' Not connected.'
         retval += '\n'
@@ -100,9 +114,9 @@ class OneWireNeo:
 
     # TODO: use case: callback on property change
 
-    # TODO: use case: indicate whether property has changed.  if numeric, indicate whether it has gone up or down.
+    # DONE: use case: indicate whether property has changed.  if numeric, indicate whether it has gone up or down.
 
-    # TODO: use case: ensure property values are trimmed.
+    # TODO: use case: ensure property values are trimmed (on display).
 
     # TODO: use case: allow cached property to be specified by sensor
 
@@ -129,7 +143,7 @@ class OneWireNeoSensor:
                 print("found existing property: " + propName)
                 self._properties[propName].update(sensor)
             else:
-                print("found new property: " + propName)
+                #print("found new property: " + propName)
                 self._properties[propName] = OneWireNeoProperty(sensor, propName)
         if (len(knownProperties) > 0):
             print("Some properties seem to have gone missing!") # TODO: callback here(?)
@@ -141,12 +155,12 @@ class OneWireNeoSensor:
         Generate a flat property name list which only contains properties in our set of desired features.
     '''
     def _getFlatPropertyList(self, sensor):
-        print("fetching flattened property list")
+        #print("fetching flattened property list")
         inProperties = list()
         self._fetchFlatProperties(sensor, sensor, inProperties)
-        print("Base property list is %s" % str(inProperties))
+        #print("Base property list is %s" % str(inProperties))
         outProperties = getDesiredAttributes(inProperties, self._desiredFeatures)
-        print("Filtered property list is %s" % str(outProperties))
+        #print("Filtered property list is %s" % str(outProperties))
         return outProperties
 
     '''
@@ -159,10 +173,10 @@ class OneWireNeoSensor:
             # '/10.5D4470010800/errata/', new base path will be 'errata/'
             basepath = curitem.path[len(baseitem.path):]
 
-        print("fetching properties with base path [%s]" % (basepath))
+        #print("fetching properties with base path [%s]" % (basepath))
         for item in curitem.iter_entries():
             if type(item).__name__ == 'Dir':
-                print("recursing to fetch child directory")
+                #print("recursing to fetch child directory")
                 self._fetchFlatProperties(baseitem, item, propList)
             else:
                 propList.append(basepath + str(item))
@@ -176,12 +190,14 @@ class OneWireNeoProperty:
         self._lastRead = None
         self._value = None
         self._updateValue(sensor)
+        self._name = path
 
     def update(self, sensor):
         self._status = PROPERTY_STATUS.Indeterminate
         self._updateValue(sensor)
 
     def _updateValue(self, sensor):
+        print("Fetching property [%s]" % self._path)
         propval = sensor.capi.get(self._path)
         if self._kind == PROPERTY_KIND.Numeric:
             testVal = float(propval)
@@ -206,6 +222,10 @@ class OneWireNeoProperty:
     def _determinePropertyMutability(self, sensor, path):
         #TODO: determine property mutability
         return False
+
+    def getFormattedValue(self):
+        #TODO fix this!
+        return self._value
 
 '''
     Placeholder for unknown family code
@@ -284,7 +304,8 @@ _FEATURE_DEFAULT_PROPS = {
     Map property names to default features; this is the main associative element in this code.
 '''
 _SOURCE_PATTERNS = {
-    FEATURES.Temperature: ['(TAI8570/)?temperature[\d]?','fasttemp','templow','temphigh','type[A-Z]/temperature'],
+    #FEATURES.Temperature: ['(TAI8570/)?temperature[\d]?','fasttemp','templow','temphigh','type[A-Z]/temperature'],
+    FEATURES.Temperature: ['(TAI8570/)?temperature[\d]?','fasttemp','type[A-Z]/temperature'],
     FEATURES.Humidity: ['(HIH4000/)?(HTM1735/)?humidity'],
     FEATURES.Pressure: ['(TAI8570/)?(B1-R1-A/)?pressure'],
     FEATURES.Counter: ['counter(s)?\.[AB]', 'counter(s)\.ALL', '(readonly/)?(counter/)?cycle(s)?', 'counter', 'page(s)?/count(er)?(s?)\.[\d]+', 'page(s)?/count(er)?(s)?.ALL'],
