@@ -1,21 +1,17 @@
 __author__ = 'sdavidson'
-
 import unittest
-from owFamily import FEATURES
-from owFamily import OwFamilyHelper
+import onewireneo
+from onewireneo import FEATURES
 
-class OwFamilyHelperTests(unittest.TestCase):
-    def setUp(self):
-        self.helper = OwFamilyHelper()
-
+class OneWireNeoTests(unittest.TestCase):
     def testGetFamilyInfo(self):
-        thermoFamily = self.helper.getFamilyInfo('10')
+        thermoFamily = onewireneo.getFamilyInfo('10')
         assert(thermoFamily.familyCode == '10')
         assert(FEATURES.Temperature in  thermoFamily.features)
         assert(thermoFamily.description == 'High Precision Digital Thermometer')
 
     def testGetFamilyInfoString(self):
-        thermoFamily = self.helper.getFamilyInfo('20');
+        thermoFamily = onewireneo.getFamilyInfo('20');
         assert(str(thermoFamily) == 'Quad A/D Converter: Family Code: 20, Features: [Temperature, Voltage]')
 
     def getTestData_ds18s20(self):
@@ -111,10 +107,10 @@ class OwFamilyHelperTests(unittest.TestCase):
         for i in range(0, 15):
             testData['pages/page.%d' % i] = self.getMemoryPage(mem, 32, i)
         return testData
-            
+
 
     def testFam10Finders(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Temperature])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Temperature])
         assert(len(outData) == 6)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
@@ -124,21 +120,21 @@ class OwFamilyHelperTests(unittest.TestCase):
         assert(outData['temperature'] == '37.2')
 
     def testFam10Finders_emptyRequestGetsBaseItems(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds18s20(), [])
         assert(len(outData) == 3)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
         assert(outData['type'] == 'DS18S20')
 
     def testFam10Finders_wrongFamilyGetsBaseItems(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Current])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds18s20(), [FEATURES.Current])
         assert(len(outData) == 3)
         assert(outData['id'] == '10.147A0A020800')
         assert(outData['family'] == '10')
         assert(outData['type'] == 'DS18S20')
 
     def testDs2404_memory(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Memory])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Memory])
         assert(len(outData) == 19)
         assert(outData['type'] == 'DS2404')
         for i in range(0,14):
@@ -148,50 +144,50 @@ class OwFamilyHelperTests(unittest.TestCase):
         assert(outData.has_key('memory'));
 
     def testDs2404_clock(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock])
         assert(len(outData) == 5)
         assert(outData['date'] == '2011/04/03 23:12:57')
         assert(outData['udate'] == '1301872377')
-        
+
     def testDs2404_counter(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Counter])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Counter])
         assert(len(outData) == 4)
         assert(outData['cycle'] == '12')
 
     def testDs2404_clockAndCounter(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock, FEATURES.Counter])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2404(), [FEATURES.Clock, FEATURES.Counter])
         assert(len(outData) == 6)
         assert(outData['date'] == '2011/04/03 23:12:57')
         assert(outData['udate'] == '1301872377')
         assert(outData['cycle'] == '12')
 
     def testDs2405(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2405(), [FEATURES.Pio, FEATURES.Sense])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2405(), [FEATURES.Pio, FEATURES.Sense])
         assert(len(outData) == 5)
         assert(outData['pio'] == '0')
         assert(outData['sensed'] == '1')
 
     def testGetDesiredSensors(self):
         sensorList = ['01.FFFFFFFFFFFF', '10.147A0A020800', '35.431246AA4FBA', '43.FACBACC12343']
-        testList = self.helper.getDesiredSensors(sensorList, set([FEATURES.Temperature]))
+        testList = onewireneo.getDesiredSensors(sensorList, set([FEATURES.Temperature]))
         assert(len(testList) == 2)
         assert('10.147A0A020800' in testList)
         assert('35.431246AA4FBA' in testList)
 
     def testAagTai8570_temperature(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Temperature])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Temperature])
         assert(len(outData) == 4)
         assert(outData['tai8570/temperature'] == '22.875')
         # TODO: this should add a 'temperature' attribute if not present - client should not be aware of idiosyncrasies
-        
+
     def testAagTai8570_pressure(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Pressure])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Pressure])
         assert(len(outData) == 4)
         assert(outData['tai8570/pressure'] == '192.5')
         # TODO: this should add a 'pressure' attribute if not present - client should not be aware of idiosyncrasies
 
     def testAagTai8570_voltage(self):
-        outData = self.helper.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Voltage])
+        outData = onewireneo.getMatchingAttributes(self.getTestData_ds2406(), [FEATURES.Voltage])
         assert(len(outData) == 11)
         assert(outData['t8a/volt.0'] == '4.75')
         assert(outData['t8a/volt.1'] == '4.85')
@@ -202,6 +198,29 @@ class OwFamilyHelperTests(unittest.TestCase):
         assert(outData['t8a/volt.6'] == '0')
         assert(outData['t8a/volt.7'] == '1.375')
 
+    def getAagTai8570_properties(self):
+        return  ['id', 'power', 'family', 'type', 'crc8', 'channels', 'memory', 'Pio.a', 'Pio.b', 'Pio.all', 'Pio.byte',
+        'sensed.a', 'sensed.b', 'sensed.ALL', 'sensed.BYTE', 'pages/page.0', 'pages/page.1', 'pages/page.2',
+        'pages/page.3', 'pages/page.ALL', 'TAI8570/pressure', 'TAI8570/sibling', 'TAI8570/temperature', 'T8A/volt.0',
+        'T8A/volt.1', 'T8A/volt.2', 'T8A/volt.3', 'T8A/volt.4', 'T8A/volt.5', 'T8A/volt.6', 'T8A/volt.7']
+
+    def testGetDesiredAttributes_temp(self):
+        outData = onewireneo.getDesiredAttributes(self.getAagTai8570_properties(), [FEATURES.Temperature])
+        assert(len(outData) == 4)
+        assert('id' in outData);
+        assert('family' in outData);
+        assert('type' in outData);
+        assert('TAI8570/temperature' in outData);
+
+    def testIsDesiredSensor_sepchars(self):
+        testSensor = '/10.5D4470010800/'
+        check = onewireneo.isDesiredSensor(testSensor,set([FEATURES.Temperature]))
+        assert(check);
+
+    #def testFoo(self):
+        #tester = onewireneo.OneWireNeo('192.168.0.42:4304', [FEATURES.Temperature, FEATURES.Humidity, FEATURES.Pressure])
+
+
     # TODO: DS1963S, family code 18
     # TODO: DS2423, family code 1D
     # TODO: DS2437, family code 1E
@@ -211,5 +230,10 @@ class OwFamilyHelperTests(unittest.TestCase):
     # TODO: DS2760, family code 30 (weather station)
     # TODO: DS2740, family code 36
     # TODO: HobbyBoards UV
+
+if __name__ == '__main__':
+    unittest.main()
+
+
 
 
