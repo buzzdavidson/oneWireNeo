@@ -11,14 +11,55 @@ from enum import Enum
 '''
 FEATURES = Enum('Temperature', 'Humidity', 'Pressure', 'Counter', 'Voltage', 'Current', 'Sense', 'Pio',
                      'Memory', 'Clock', 'Illumination', 'UV', 'CO2', "LCD")
+'''
+    States for property objects
+'''
 PROPERTY_STATUS = Enum('New', 'Indeterminate', 'Decreased', 'Stable', 'Increased', 'Changed', 'Missing')
+'''
+    Data types for properties
+'''
 PROPERTY_KIND = Enum('Numeric','String','Timestamp','Boolean','Binary')
+'''
+    States for sensor objects
+'''
 SENSOR_STATUS = Enum('New', 'Available', 'Missing')
+'''
+    Sensor properties which are always included if present; may also include entries for uniquely identifying specific
+    third-party sensors
+'''
 IDENT_PROPERTIES = ('id', 'family', 'type', 'MultiSensor/type', 'TAI8570/sibling')
 
+'''
+    Simple display constants for property states
+'''
 STATUS_BUMPS = {PROPERTY_STATUS.New: 'n', PROPERTY_STATUS.Indeterminate: '?', PROPERTY_STATUS.Stable: '=',
                 PROPERTY_STATUS.Changed: '~', PROPERTY_STATUS.Increased: '+', PROPERTY_STATUS.Decreased: '-',
                 PROPERTY_STATUS.Missing: '!' }
+
+'''
+    Defines default property names for each feature.  Helps to eliminate some of the inconsistencies in the
+    owfs codebase when referring to properties.
+'''
+FEATURE_DEFAULT_PROPERTIES = {
+    FEATURES.Temperature: 'temperature',
+    FEATURES.Humidity: 'humidity',
+    FEATURES.Pressure: 'pressure',
+    FEATURES.Counter: 'counter',
+    FEATURES.Voltage: 'voltage'
+}
+
+
+class OneWireNeoException(Exception):
+    """
+    OneWire exception
+    """
+    def __init__(self, value):
+        Exception.__init__(self)
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
 
 '''
     Represents a single "Family" of 1-Wire devices
@@ -36,9 +77,9 @@ class OneWireFamily:
     description = property(lambda self: self._description)
     features = property(lambda self: self._desiredFeatures)
 
-
 class OneWireNeo:
 
+    # TODO: this is hard to test - pass in (optional) Connection to support mock
     def __init__(self, address='localhost:4304', desiredFeatures=None):
         # TODO: trap and report errors on connect.
         print("Connecting to " + address)
@@ -53,9 +94,7 @@ class OneWireNeo:
 
     desiredFeatures = property(lambda self: self._desiredFeatures)
     address = property(lambda self: self._address)
-    # TODO: connected should check actual state
-    # TODO: sensors should return new list
-
+    sensors = property(lambda self: tuple(self._sensors.values()))
 
     def refresh(self):
         self._updateSensors()
@@ -112,23 +151,12 @@ class OneWireNeo:
 
 
     # DONE: use case: get list of sensors matching desired features
-
     # DONE: use case: get properties of single sensor
-
-    # TODO: use case: allow single property to be changed
-
-    # TODO: use case: display memory as clean hex
-
-    # TODO: use case: callback on property change
-
+    # DONE: use case: display memory as clean hex
     # DONE: use case: indicate whether property has changed.  if numeric, indicate whether it has gone up or down.
-
     # DONE: use case: ensure property values are trimmed (on display).
-
-    # TODO: use case: allow cached property to be specified by sensor
-
-    # TODO: use case: callback on sensor availability change (new, missing, returned)
-
+    # TODO: use case: allow single property to be changed
+    # TODO: use case: allow cached property to be specified per sensor
 
 class OneWireNeoSensor:
     def __init__(self, sensor, desiredFeatures=None):
@@ -142,12 +170,17 @@ class OneWireNeoSensor:
         self.update(sensor)
 
     status = property(lambda self: self._status)
-    # TODO getter for properties
     path = property(lambda self: self._path)
     id = property(lambda self: self._id)
-    # TODO setter for cached
+    # TODO setter for cached, ensure path read uses uncached path if false
     cached = property(lambda self: self._cached)
     lastRead = property(lambda self: self._lastRead)
+
+    def getProperty(self, propName):
+        if self._properties.has_key(propName):
+            return self._properties[propName]
+        else:
+            raise OneWireNeoException(str('Unknown property %s' % propName))
 
     def update(self, sensor):
         knownProperties = set(self._properties)
@@ -158,7 +191,7 @@ class OneWireNeoSensor:
             else:
                 self._properties[propName] = OneWireNeoProperty(sensor, propName)
         if (len(knownProperties) > 0):
-            print("Some properties seem to have gone missing!") # TODO: callback here(?)
+            print("Some properties seem to have gone missing!")
             for propName in knownProperties:
                 self._properties[propName]._status = PROPERTY_STATUS.Missing
         self._lastRead = datetime.now()
@@ -235,6 +268,7 @@ class OneWireNeoProperty:
 
         self._lastRead = datetime.now()
 
+    # TODO: unit test to keep devs from screwing up rules <g>
     def _determinePropertyKind(self, sensor, path):
         propfeature = findFeatureForProperty(self._name)
         if (propfeature is None):
@@ -325,27 +359,13 @@ _FAMILY_FEATURES = {
 # TODO: Use properties to modify sensor descriptions
 # TODO: Use properties to selectively hide sensors - TAI8570/sibling property contains property of paired sibling sensor for primary; secondary has no value under TAI8570/sibling.  Slave should not be displayed in list.
 # TODO: Allow specific sensor types to hide properties
-
 # TODO: duplicate value to standard key IIF (a) std key doesnt exist, (b) one value exists in category
 # TODO: add facility to standardize: mem pages= pages.0, etc
-'''
-    Defines default property names for each feature.  Helps to eliminate some of the inconsistencies in the
-    owfs codebase when referring to properties.
-'''
-_FEATURE_DEFAULT_PROPS = {
-    FEATURES.Temperature: 'temperature',
-    FEATURES.Humidity: 'humidity',
-    FEATURES.Pressure: 'pressure',
-    FEATURES.Counter: 'counter',
-    FEATURES.Voltage: 'voltage'
-}
 
 '''
     Map property names to default features; this is the main associative element in this code.
 '''
 _SOURCE_PATTERNS = {
-    #FEATURES.Temperature: ['(TAI8570/)?temperature[\d]?','fasttemp','templow','temphigh','type[A-Z]/temperature'],
-    #FEATURES.Temperature: ['(TAI8570/)?temperature[\d]?','fasttemp','type[A-Z]/temperature'],
     # TODO: temp: determine how to handle multiple resolutions without pre-loading all, it takes too long
     FEATURES.Temperature: ['(TAI8570/)?temperature','fasttemp','type[A-Z]/temperature'],
     FEATURES.Humidity: ['(HIH4000/)?(HTM1735/)?humidity'],
@@ -355,7 +375,6 @@ _SOURCE_PATTERNS = {
     FEATURES.Current: ['current','amphours'],
     FEATURES.Sense: ['sensed', 'sensed\.[a-z]', 'sensed\.all', 'sensed\.byte'],
     FEATURES.Pio: ['pio', 'pio\.[a-z]', 'pio\.(all)?(byte)?', 'latch\.[a-z]','latch\.(all)?(byte)?', 'branch','channels','flipflop\.[AB]?(ALL)?(BYTE)?'],
-    #FEATURES.Memory: ['application', 'memory','page\.ALL', 'page\.[\d]+', 'pages/page\.[\d]+', 'pages/page\.ALL'],
     FEATURES.Memory: ['application', 'page\.[\d]+', 'pages/page\.[\d]+'],
     FEATURES.Clock: ['(u)?date', 'readonly/clock', 'disconnect/(u)?date', 'endcharge/(u)?date', 'clock/(u)?date' ],
     FEATURES.Illumination: ['S3-R1-A/(illumination)?(current)?(gain)?'],
@@ -367,7 +386,7 @@ _SOURCE_PATTERNS = {
 '''
     Compiles property matchers from _SOURCE_PATTERNS into regex matchers to improve performance
 '''
-#TODO: check efficiency of this methodology.  Is there a more appropriate place to init library-level data?
+#TODO: check efficiency of this methodology.  Is there a more appropriate way to init library-level data?
 _finderMatchers = dict()
 for key, value in _SOURCE_PATTERNS.items():
     matcherList = list()
